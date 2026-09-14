@@ -1,6 +1,20 @@
+import sys
+try:
+    # When stdout/stderr are redirected to a file (e.g. by the scheduled task's
+    # .bat file), Python falls back to the console's codepage (cp1252 on most
+    # Windows setups) instead of UTF-8. APOD responses often contain characters
+    # outside cp1252 (curly quotes, em dashes, Greek letters, etc.), which made
+    # print() crash and kill the whole run before the wallpaper got set.
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+    sys.stderr.reconfigure(encoding="utf-8", errors="replace")
+except Exception:
+    pass
+
 from logging import error
 import wallpaper_utility
-from win10toast import ToastNotifier  
+class ToastNotifier:
+    def show_toast(self, *args, **kwargs):
+        pass
 from random import choice
 
 
@@ -22,7 +36,7 @@ def startSetWallpaperProcedure():
             hd_url = getOneWorkingImageFromArchive()
     else:
         hd_url = getOneWorkingImageFromArchive()
-    
+
     wallpaper_image_path = download_image(hd_url,get_date(response))
     print(wallpaper_image_path)
     wallpaper_utility.changeBG(wallpaper_image_path)
@@ -41,7 +55,7 @@ def getOneWorkingImageFromArchive():
             archive_responses_list.append(hd_url)
         except:
             pass
-    
+
     if  len(archive_responses_list) == 0 :
         n.show_toast(wallpaper_utility.SERVICE_NAME, "Archive retrieval failed", duration = 10)
         return error

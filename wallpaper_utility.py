@@ -1,6 +1,10 @@
 import ctypes
+import os
 
-APOD_API_KEY = "DEMO_KEY"
+# NASA APOD API Key. Set your own via the APOD_API_KEY environment variable
+# (get one at https://api.nasa.gov/); "DEMO_KEY" works too but is limited to
+# 30 requests/hour.
+APOD_API_KEY = os.environ.get("APOD_API_KEY", "DEMO_KEY")
 SERVICE_NAME = "NASA Wallpaper"
 
 # constant to work with windows 
