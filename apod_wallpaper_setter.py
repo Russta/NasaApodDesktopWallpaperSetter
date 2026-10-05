@@ -10,12 +10,11 @@ try:
 except Exception:
     pass
 
-from logging import error
 import wallpaper_utility
 class ToastNotifier:
     def show_toast(self, *args, **kwargs):
         pass
-from random import choice
+from random import shuffle
 
 
 from apod_object_parser import download_image, get_data, get_data_array, get_date, get_hdurl, get_media_type, get_url, is_connected
@@ -23,44 +22,69 @@ from apod_object_parser import download_image, get_data, get_data_array, get_dat
 # NASA Astronomical Picture of the Day API Key. "DEMO_KEY" value works too but with 30 requests per hour
 # still since we update our wallpaper less frequently we need not worry about the key
 
+# NASA's APOD site is mid-migration to science.nasa.gov/apod, and since the
+# move the API has sometimes been returning this generic site logo as the
+# hdurl/url for the current day's entry instead of an actual photo. Treat it
+# the same as a missing/broken hdurl and fall back to the archive.
+PLACEHOLDER_URL_MARKERS = ("nasa-logo",)
+
+def is_placeholder_image_url(url):
+    if not url:
+        return True
+    lowered = url.lower()
+    return any(marker in lowered for marker in PLACEHOLDER_URL_MARKERS)
+
 def startSetWallpaperProcedure():
     response = get_data(wallpaper_utility.APOD_API_KEY)
     print(response)
-    url = get_url(response)
     media_type = get_media_type(response)
+    wallpaper_image_path = None
+
     if media_type == "image":
         try:
             # best case, we'll get a hd walpaper for the day.
             hd_url = get_hdurl(response)
-        except:
-            hd_url = getOneWorkingImageFromArchive()
-    else:
-        hd_url = getOneWorkingImageFromArchive()
+            if is_placeholder_image_url(hd_url):
+                raise ValueError(f"hdurl is a placeholder image, not today's photo: {hd_url}")
+            wallpaper_image_path = download_image(hd_url, get_date(response))
+        except Exception as e:
+            print(f"Today's photo didn't work out ({e}); falling back to archive")
 
-    wallpaper_image_path = download_image(hd_url,get_date(response))
+    if wallpaper_image_path is None:
+        wallpaper_image_path = getOneWorkingImageFromArchive(get_date(response))
+
     print(wallpaper_image_path)
     wallpaper_utility.changeBG(wallpaper_image_path)
     n.show_toast(wallpaper_utility.SERVICE_NAME, "Wallpaper changed!", duration = 10)
 
 
-def getOneWorkingImageFromArchive():
+def getOneWorkingImageFromArchive(image_date):
     responses_array = get_data_array(wallpaper_utility.APOD_API_KEY)
     print("checking archives:")
-    archive_responses_list = []
+    archive_hd_urls = []
     print(responses_array)
 
     for res in responses_array:
         try:
             hd_url = get_hdurl(res)
-            archive_responses_list.append(hd_url)
+            if is_placeholder_image_url(hd_url):
+                continue
+            archive_hd_urls.append(hd_url)
         except:
             pass
 
-    if  len(archive_responses_list) == 0 :
-        n.show_toast(wallpaper_utility.SERVICE_NAME, "Archive retrieval failed", duration = 10)
-        return error
-    else :
-        return choice(archive_responses_list)
+    shuffle(archive_hd_urls)
+    for hd_url in archive_hd_urls:
+        try:
+            # download_image also validates that the response is actually an
+            # image (not an HTML error page or a 403), so a broken candidate
+            # raises here and we just move on to the next one.
+            return download_image(hd_url, image_date)
+        except Exception as e:
+            print(f"Archive candidate failed ({e}); trying another...")
+
+    n.show_toast(wallpaper_utility.SERVICE_NAME, "Archive retrieval failed", duration = 10)
+    raise RuntimeError("No archive image could be downloaded")
 
 n = ToastNotifier()
 

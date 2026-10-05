@@ -63,9 +63,15 @@ def download_image(url, date):
         "Connection": "keep-alive"
     }
     if os.path.isfile(complete_file_path) == False:
-        raw_image = requests.get(url, headers=headers).content
+        resp = requests.get(url, headers=headers, timeout=30)
+        content_type = resp.headers.get("Content-Type", "")
+        if resp.status_code != 200 or not content_type.startswith("image/"):
+            raise RuntimeError(
+                f"Download from {url} was not an image "
+                f"(HTTP {resp.status_code}, Content-Type '{content_type}')"
+            )
         with open(complete_file_path, 'wb') as file:
-            file.write(raw_image)
+            file.write(resp.content)
     return complete_file_path
 
 def getProperDirectoryPath():
