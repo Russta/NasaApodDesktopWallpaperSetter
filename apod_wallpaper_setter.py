@@ -14,10 +14,13 @@ import wallpaper_utility
 class ToastNotifier:
     def show_toast(self, *args, **kwargs):
         pass
-from random import shuffle
+import glob
+import os
+from random import choice, shuffle
+from PIL import Image
 
 
-from apod_object_parser import download_image, get_data, get_data_array, get_date, get_hdurl, get_media_type, get_url, is_connected
+from apod_object_parser import download_image, getProperDirectoryPath, get_data, get_data_array, get_date, get_hdurl, get_media_type, is_connected
 
 # NASA Astronomical Picture of the Day API Key. "DEMO_KEY" value works too but with 30 requests per hour
 # still since we update our wallpaper less frequently we need not worry about the key
@@ -34,11 +37,25 @@ def is_placeholder_image_url(url):
     lowered = url.lower()
     return any(marker in lowered for marker in PLACEHOLDER_URL_MARKERS)
 
+MIN_SAVED_WIDTH = 800
+MIN_SAVED_HEIGHT = 500
+
 def startSetWallpaperProcedure():
+    try:
+        wallpaper_image_path = getWallpaperFromNasa()
+    except Exception as e:
+        print(f"Couldn't get a photo from NASA ({e}); using a previously saved one")
+        wallpaper_image_path = getRandomSavedImage()
+
+    print(wallpaper_image_path)
+    wallpaper_utility.changeBG(wallpaper_image_path)
+    n.show_toast(wallpaper_utility.SERVICE_NAME, "Wallpaper changed!", duration = 10)
+
+
+def getWallpaperFromNasa():
     response = get_data(wallpaper_utility.APOD_API_KEY)
     print(response)
     media_type = get_media_type(response)
-    wallpaper_image_path = None
 
     if media_type == "image":
         try:
@@ -46,16 +63,29 @@ def startSetWallpaperProcedure():
             hd_url = get_hdurl(response)
             if is_placeholder_image_url(hd_url):
                 raise ValueError(f"hdurl is a placeholder image, not today's photo: {hd_url}")
-            wallpaper_image_path = download_image(hd_url, get_date(response))
+            return download_image(hd_url, get_date(response))
         except Exception as e:
             print(f"Today's photo didn't work out ({e}); falling back to archive")
 
-    if wallpaper_image_path is None:
-        wallpaper_image_path = getOneWorkingImageFromArchive(get_date(response))
+    return getOneWorkingImageFromArchive(get_date(response))
 
-    print(wallpaper_image_path)
-    wallpaper_utility.changeBG(wallpaper_image_path)
-    n.show_toast(wallpaper_utility.SERVICE_NAME, "Wallpaper changed!", duration = 10)
+
+def getRandomSavedImage():
+    candidates = []
+    for path in glob.glob(os.path.join(getProperDirectoryPath(), "*.png")):
+        try:
+            with Image.open(path) as image:
+                width, height = image.size
+                image.verify()
+        except Exception:
+            continue
+        if width >= MIN_SAVED_WIDTH and height >= MIN_SAVED_HEIGHT:
+            candidates.append(path)
+
+    if not candidates:
+        n.show_toast(wallpaper_utility.SERVICE_NAME, "No saved wallpapers available", duration = 10)
+        raise RuntimeError("No usable saved images found to fall back on")
+    return choice(candidates)
 
 
 def getOneWorkingImageFromArchive(image_date):
